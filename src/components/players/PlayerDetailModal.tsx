@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   MapPin, 
@@ -11,10 +11,14 @@ import {
   Shield, 
   TrendingUp, 
   CheckCircle,
-  Video
+  Video,
+  Edit3,
+  Save,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import type { Player, Observation } from '../../types';
+import type { Player, Observation, ScoutingStatus, PlayerRatings } from '../../types';
 
 interface PlayerDetailModalProps {
   playerId: string;
@@ -27,11 +31,67 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
   onClose,
   onAddObservation 
 }) => {
-  const { players, observations, updatePlayer } = useApp();
+  const { players, observations, updatePlayer, setEditingPlayer } = useApp();
   const player = players.find((p) => p.id === playerId);
   const playerObs = observations.filter((o) => o.playerId === playerId);
 
   const [activeTab, setActiveTab] = useState<'perfil' | 'metricas' | 'observaciones'>('perfil');
+  const [editedNotes, setEditedNotes] = useState(player?.notes || '');
+  const [localRatings, setLocalRatings] = useState<PlayerRatings>(
+    player?.ratings || {
+      controlOrientado: 7.8,
+      paseCorto: 7.9,
+      paseLargo: 7.5,
+      conduccion: 7.6,
+      regate: 7.7,
+      finalizacion: 7.2,
+      juegoAereo: 7.0,
+      centros: 7.4,
+      golpeo: 7.5,
+      recuperacion: 7.1,
+      anticipacion: 7.6,
+      tomaDecisiones: 7.8,
+      visionJuego: 8.0,
+      posicionamiento: 7.7,
+      velocidad: 7.9,
+      aceleracion: 8.0,
+      resistencia: 7.8,
+      fuerza: 7.4,
+      agilidad: 7.9,
+      coordinacion: 8.0,
+      salto: 7.3,
+      comprensionJuego: 8.0,
+      disciplinaTactica: 8.1,
+      ocupacionEspacios: 7.9,
+      presion: 7.6,
+      transicionDefensiva: 7.4,
+      transicionOfensiva: 8.1,
+      juegoSinBalon: 7.8,
+      adaptacionSistemas: 7.9,
+      liderazgo: 7.5,
+      concentracion: 7.8,
+      personalidadCompetitiva: 8.0,
+      comunicacion: 7.4,
+      trabajoEquipo: 8.2,
+      adaptabilidad: 7.9,
+    }
+  );
+
+  const [ratingsSavedSuccess, setRatingsSavedSuccess] = useState(false);
+  const [notesSavedSuccess, setNotesSavedSuccess] = useState(false);
+  const [isEditingQuickInfo, setIsEditingQuickInfo] = useState(false);
+  const [quickDorsal, setQuickDorsal] = useState(player?.dorsal || 10);
+  const [quickClub, setQuickClub] = useState(player?.currentClub || '');
+
+  // Synchronize local states when the player record is updated
+  useEffect(() => {
+    if (player) {
+      setLocalRatings(player.ratings);
+      setEditedNotes(player.notes || '');
+      setQuickDorsal(player.dorsal);
+      setQuickClub(player.currentClub);
+    }
+  }, [player]);
 
   if (!player) return null;
 
@@ -48,10 +108,9 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
   };
 
   const age = getAge(player.birthDate);
-  const r = player.ratings;
+  const r = localRatings;
 
   // Radar points calculation for hexagon
-  // Attributes: [Técnica, Físico, Táctica, Mental, Visión, Anticipación]
   const radarCategories = [
     { label: 'Técnica', value: (r.controlOrientado + r.paseCorto + r.regate + r.finalizacion) / 4 },
     { label: 'Físico', value: (r.velocidad + r.aceleracion + r.resistencia + r.fuerza) / 4 },
@@ -68,7 +127,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
 
   const getCoordinates = (value: number, index: number, total: number) => {
     const angle = (Math.PI * 2 / total) * index - Math.PI / 2;
-    const distance = (value / 10) * radius;
+    const distance = (Math.min(10, Math.max(0, value)) / 10) * radius;
     const x = center + distance * Math.cos(angle);
     const y = center + distance * Math.sin(angle);
     return { x, y };
@@ -82,6 +141,41 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
     .join(' ');
 
   const gridLevels = [0.25, 0.5, 0.75, 1];
+
+  const handleStatusChange = (newStatus: ScoutingStatus) => {
+    updatePlayer(player.id, { status: newStatus });
+  };
+
+  const handleSaveRatings = () => {
+    updatePlayer(player.id, { ratings: localRatings });
+    setRatingsSavedSuccess(true);
+    setTimeout(() => setRatingsSavedSuccess(false), 3000);
+  };
+
+  const handleSaveNotes = () => {
+    updatePlayer(player.id, { notes: editedNotes });
+    setNotesSavedSuccess(true);
+    setTimeout(() => setNotesSavedSuccess(false), 3000);
+  };
+
+  const handleRatingChange = (key: keyof PlayerRatings, val: number) => {
+    setLocalRatings((prev) => ({
+      ...prev,
+      [key]: val,
+    }));
+  };
+
+  const statusOptions: ScoutingStatus[] = [
+    'Prioritario',
+    'Convocado',
+    'Propuesto para convocatoria',
+    'En seguimiento',
+    'Pendiente de observar',
+    'Nuevo',
+    'En evaluación adicional',
+    'No prioritario',
+    'Archivado',
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -98,13 +192,13 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Player Profile Hero (Images 3 & 5 inspired) */}
+        {/* Player Profile Hero */}
         <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-slate-850 to-sky-950/60">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
             <img
@@ -121,14 +215,23 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                 <span className="rounded bg-amber-400 text-slate-950 font-black px-2 py-0.5 text-xs">
                   {player.primaryPosition}
                 </span>
-                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                  player.status === 'Prioritario' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                  player.status === 'Convocado' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-                  'bg-slate-800 text-slate-300'
-                }`}>
-                  {player.status}
-                </span>
+
+                {/* Interactive Status Selector */}
+                <div className="relative inline-block">
+                  <select
+                    value={player.status}
+                    onChange={(e) => handleStatusChange(e.target.value as ScoutingStatus)}
+                    className="rounded-full bg-slate-800 border border-amber-500/40 px-3 py-0.5 text-xs font-bold text-amber-300 focus:outline-none cursor-pointer"
+                  >
+                    {statusOptions.map((st) => (
+                      <option key={st} value={st} className="bg-slate-900 text-slate-200">
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
               <p className="text-xs text-slate-300 font-medium">
                 {player.firstName} {player.lastName} • {age} años ({player.birthDate})
               </p>
@@ -138,29 +241,86 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                   {player.island} ({player.municipality})
                 </span>
                 <span>•</span>
-                <span className="text-slate-200">Club: <strong>{player.currentClub}</strong></span>
-                <span>•</span>
-                <span>Pie: <strong>{player.dominantFoot}</strong></span>
-                <span>•</span>
-                <span>Altura: <strong>{player.heightCm} cm</strong></span>
+                {isEditingQuickInfo ? (
+                  <div className="flex items-center gap-2 bg-slate-800/80 p-1 rounded-lg border border-slate-700">
+                    <span className="text-[11px] text-slate-300">Club:</span>
+                    <input
+                      type="text"
+                      value={quickClub}
+                      onChange={(e) => setQuickClub(e.target.value)}
+                      className="rounded bg-slate-900 px-2 py-0.5 text-xs text-white border border-slate-600 w-32"
+                    />
+                    <span className="text-[11px] text-slate-300">Dorsal:</span>
+                    <input
+                      type="number"
+                      value={quickDorsal}
+                      onChange={(e) => setQuickDorsal(Number(e.target.value))}
+                      className="rounded bg-slate-900 px-2 py-0.5 text-xs text-white border border-slate-600 w-14"
+                    />
+                    <button
+                      onClick={() => {
+                        updatePlayer(player.id, { currentClub: quickClub, dorsal: quickDorsal });
+                        setIsEditingQuickInfo(false);
+                      }}
+                      className="rounded bg-emerald-500 px-2 py-0.5 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={() => setIsEditingQuickInfo(false)}
+                      className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:text-white"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-slate-200">
+                      Club: <strong>{player.currentClub}</strong>
+                      <button 
+                        onClick={() => setIsEditingQuickInfo(true)} 
+                        className="ml-1 text-slate-500 hover:text-amber-400 p-0.5"
+                        title="Editar club y dorsal rápido"
+                      >
+                        <Edit3 className="h-3 w-3 inline" />
+                      </button>
+                    </span>
+                    <span>•</span>
+                    <span>Pie: <strong>{player.dominantFoot}</strong></span>
+                    <span>•</span>
+                    <span>Altura: <strong>{player.heightCm} cm</strong></span>
+                  </>
+                )}
               </div>
             </div>
 
             {/* Actions in Hero */}
             <div className="flex sm:flex-col gap-2">
               <button
+                onClick={() => {
+                  setEditingPlayer(player);
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-sky-500/20 border border-sky-500/50 px-3 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-500/30 transition-all cursor-pointer shadow-sm"
+                title="Editar todos los datos del jugador"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+                <span>Editar Ficha</span>
+              </button>
+
+              <button
                 onClick={onAddObservation}
-                className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-all cursor-pointer shadow-sm"
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-all cursor-pointer shadow-sm"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Observación</span>
               </button>
+
               {player.videoUrl && (
                 <a
                   href={player.videoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:text-sky-300 transition-colors"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:text-sky-300 transition-colors"
                 >
                   <Video className="h-3.5 w-3.5 text-sky-400" />
                   <span>Vídeo</span>
@@ -190,7 +350,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Valoraciones Detalladas (1-10)
+            Valoraciones Actualizables (1-10)
           </button>
           <button
             onClick={() => setActiveTab('observaciones')}
@@ -208,7 +368,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {activeTab === 'perfil' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left: Radar Chart (Wyscout / Trafford trait radar style) */}
+              {/* Left: Radar Chart */}
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 flex flex-col items-center">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Star className="h-3.5 w-3.5 text-amber-400" />
@@ -303,7 +463,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Right: Tactical Pitch & Notes */}
+              {/* Right: Tactical Pitch & Editable Notes */}
               <div className="space-y-4">
                 {/* Mini Field Position Visualizer */}
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
@@ -330,15 +490,37 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                   </div>
                 </div>
 
-                {/* Observer Notes */}
+                {/* Editable Observer Notes */}
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-xs space-y-2">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Observaciones y Criterio del Scout
-                  </h4>
-                  <p className="text-slate-300 leading-relaxed italic bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                    "{player.notes || 'Futbolista en seguimiento continuado por la secretaría técnica autonómica.'}"
-                  </p>
-                  <p className="text-[11px] text-slate-400">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Observaciones y Criterio del Scout
+                    </h4>
+                    <button
+                      onClick={handleSaveNotes}
+                      className="flex items-center gap-1 rounded bg-amber-500 px-2 py-1 text-[11px] font-bold text-slate-950 hover:bg-amber-400 cursor-pointer"
+                    >
+                      <Save className="h-3 w-3" />
+                      <span>Guardar Nota</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={editedNotes}
+                    onChange={(e) => setEditedNotes(e.target.value)}
+                    placeholder="Escribe comentarios de seguimiento técnico..."
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-200 text-xs focus:border-amber-400 focus:outline-none"
+                  />
+
+                  {notesSavedSuccess && (
+                    <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      <span>Nota guardada correctamente en Supabase</span>
+                    </p>
+                  )}
+
+                  <p className="text-[11px] text-slate-400 pt-1">
                     Scout asignado: <strong className="text-slate-200">{player.scoutResponsible}</strong>
                   </p>
                 </div>
@@ -347,102 +529,147 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
           )}
 
           {activeTab === 'metricas' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-              {/* Technical (14 items) */}
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2">
-                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
-                  Características Técnicas
-                </h4>
-                <div className="space-y-1.5">
-                  {[
-                    ['Control Orientado', r.controlOrientado],
-                    ['Pase Corto', r.paseCorto],
-                    ['Pase Largo', r.paseLargo],
-                    ['Conducción', r.conduccion],
-                    ['Regate / 1vs1', r.regate],
-                    ['Finalización', r.finalizacion],
-                    ['Juego Aéreo', r.juegoAereo],
-                    ['Centros', r.centros],
-                    ['Golpeo', r.golpeo],
-                    ['Recuperación', r.recuperacion],
-                    ['Anticipación', r.anticipacion],
-                    ['Toma de Decisiones', r.tomaDecisiones],
-                    ['Visión de Juego', r.visionJuego],
-                    ['Posicionamiento', r.posicionamiento],
-                  ].map(([label, val]) => (
-                    <div key={label as string} className="flex items-center justify-between">
-                      <span className="text-slate-300">{label}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-24 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className="h-full bg-amber-400 rounded-full"
-                            style={{ width: `${(val as number) * 10}%` }}
-                          />
-                        </div>
-                        <span className="font-bold text-white w-6 text-right">{(val as number).toFixed(1)}</span>
-                      </div>
-                    </div>
-                  ))}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div>
+                  <h4 className="font-bold text-amber-400 text-xs uppercase tracking-wider">
+                    Actualización de Valoraciones Técnicas (Escala 1 al 10)
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Ajusta los sliders interactivos para actualizar el rendimiento del jugador y pulsa Guardar.
+                  </p>
                 </div>
+                <button
+                  onClick={handleSaveRatings}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 cursor-pointer"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>Guardar Valoraciones Actualizadas</span>
+                </button>
               </div>
 
-              {/* Physical & Tactical & Mental */}
-              <div className="space-y-4">
-                {/* Physical */}
+              {ratingsSavedSuccess && (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 p-2.5 text-xs font-bold text-emerald-300 animate-in fade-in">
+                  <CheckCircle className="h-4 w-4 text-emerald-400" />
+                  <span>¡Valoraciones técnicas actualizadas y guardadas con éxito en Supabase!</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                {/* Technical (14 items) */}
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2">
-                    Características Físicas
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
+                    Características Técnicas
                   </h4>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {[
-                      ['Velocidad Punta', r.velocidad],
-                      ['Aceleración', r.aceleracion],
-                      ['Resistencia Aeróbica', r.resistencia],
-                      ['Fuerza / Duelo', r.fuerza],
-                      ['Agilidad', r.agilidad],
-                      ['Salto', r.salto],
-                    ].map(([label, val]) => (
-                      <div key={label as string} className="flex items-center justify-between">
-                        <span className="text-slate-300">{label}</span>
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-24 rounded-full bg-slate-800 overflow-hidden">
-                            <div
-                              className="h-full bg-sky-400 rounded-full"
-                              style={{ width: `${(val as number) * 10}%` }}
-                            />
+                      ['Control Orientado', 'controlOrientado'],
+                      ['Pase Corto', 'paseCorto'],
+                      ['Pase Largo', 'paseLargo'],
+                      ['Conducción', 'conduccion'],
+                      ['Regate / 1vs1', 'regate'],
+                      ['Finalización', 'finalizacion'],
+                      ['Juego Aéreo', 'juegoAereo'],
+                      ['Centros', 'centros'],
+                      ['Golpeo', 'golpeo'],
+                      ['Recuperación', 'recuperacion'],
+                      ['Anticipación', 'anticipacion'],
+                      ['Toma de Decisiones', 'tomaDecisiones'],
+                      ['Visión de Juego', 'visionJuego'],
+                      ['Posicionamiento', 'posicionamiento'],
+                    ].map(([label, key]) => {
+                      const val = localRatings[key as keyof PlayerRatings];
+                      return (
+                        <div key={key} className="space-y-1">
+                          <div className="flex justify-between items-center text-slate-300">
+                            <span>{label}</span>
+                            <span className="font-bold text-amber-400">{val.toFixed(1)}</span>
                           </div>
-                          <span className="font-bold text-white w-6 text-right">{(val as number).toFixed(1)}</span>
+                          <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step="0.1"
+                            value={val}
+                            onChange={(e) => handleRatingChange(key as keyof PlayerRatings, parseFloat(e.target.value))}
+                            className="w-full accent-amber-400 cursor-pointer"
+                          />
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Mental */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2">
-                    Capacidades Mentales y Competitivas
-                  </h4>
-                  <div className="space-y-1.5">
-                    {[
-                      ['Liderazgo', r.liderazgo],
-                      ['Concentración', r.concentracion],
-                      ['Personalidad Competitiva', r.personalidadCompetitiva],
-                      ['Trabajo en Equipo', r.trabajoEquipo],
-                    ].map(([label, val]) => (
-                      <div key={label as string} className="flex items-center justify-between">
-                        <span className="text-slate-300">{label}</span>
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-24 rounded-full bg-slate-800 overflow-hidden">
-                            <div
-                              className="h-full bg-purple-400 rounded-full"
-                              style={{ width: `${(val as number) * 10}%` }}
+                {/* Physical & Tactical & Mental */}
+                <div className="space-y-4">
+                  {/* Physical */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2">
+                    <h4 className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2">
+                      Características Físicas
+                    </h4>
+                    <div className="space-y-2">
+                      {[
+                        ['Velocidad Punta', 'velocidad'],
+                        ['Aceleración', 'aceleracion'],
+                        ['Resistencia Aeróbica', 'resistencia'],
+                        ['Fuerza / Duelo', 'fuerza'],
+                        ['Agilidad', 'agilidad'],
+                        ['Salto', 'salto'],
+                      ].map(([label, key]) => {
+                        const val = localRatings[key as keyof PlayerRatings];
+                        return (
+                          <div key={key} className="space-y-1">
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>{label}</span>
+                              <span className="font-bold text-sky-400">{val.toFixed(1)}</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              step="0.1"
+                              value={val}
+                              onChange={(e) => handleRatingChange(key as keyof PlayerRatings, parseFloat(e.target.value))}
+                              className="w-full accent-sky-400 cursor-pointer"
                             />
                           </div>
-                          <span className="font-bold text-white w-6 text-right">{(val as number).toFixed(1)}</span>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Mental */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-2">
+                    <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2">
+                      Capacidades Mentales y Competitivas
+                    </h4>
+                    <div className="space-y-2">
+                      {[
+                        ['Liderazgo', 'liderazgo'],
+                        ['Concentración', 'concentracion'],
+                        ['Personalidad Competitiva', 'personalidadCompetitiva'],
+                        ['Trabajo en Equipo', 'trabajoEquipo'],
+                      ].map(([label, key]) => {
+                        const val = localRatings[key as keyof PlayerRatings];
+                        return (
+                          <div key={key} className="space-y-1">
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>{label}</span>
+                              <span className="font-bold text-purple-400">{val.toFixed(1)}</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              step="0.1"
+                              value={val}
+                              onChange={(e) => handleRatingChange(key as keyof PlayerRatings, parseFloat(e.target.value))}
+                              className="w-full accent-purple-400 cursor-pointer"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -457,7 +684,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                 </p>
                 <button
                   onClick={onAddObservation}
-                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 cursor-pointer"
                 >
                   + Registrar Nueva Observación
                 </button>

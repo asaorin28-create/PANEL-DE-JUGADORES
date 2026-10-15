@@ -11,19 +11,33 @@ import {
   CheckCircle, 
   Download,
   Trash2,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import type { CallUp, Player } from '../../types';
+import type { CallUp, Player, Category } from '../../types';
 
 export const CallUpsView: React.FC = () => {
-  const { callUps, players, saveCallUp } = useApp();
+  const { callUps, players, saveCallUp, deleteCallUp } = useApp();
 
   const [selectedCallUpId, setSelectedCallUpId] = useState(callUps[0]?.id || '');
   const activeCallUp = callUps.find((c) => c.id === selectedCallUpId) || callUps[0];
 
   const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isOfficialLetterView, setIsOfficialLetterView] = useState(false);
+  const [searchPlayerTerm, setSearchPlayerTerm] = useState('');
+
+  // New Call-up form fields
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState<Category>('Sub-16');
+  const [newSeason, setNewSeason] = useState('2025/2026');
+  const [newSelectionName, setNewSelectionName] = useState('Selección Canaria Sub-16 Masculina');
+  const [newTournament, setNewTournament] = useState('Campeonato de España de Selecciones Autonómicas (RFEF)');
+  const [newDate, setNewDate] = useState('2026-11-15');
+  const [newLocation, setNewLocation] = useState('Estadio Gran Canaria / Las Palmas');
+  const [newStaff, setNewStaff] = useState('David Sousa (Seleccionador), Alexis Trujillo (2º Entrenador)');
+  const [newNotes, setNewNotes] = useState('');
 
   // Selected & reserve player objects
   const selectedPlayers = players.filter((p) => activeCallUp?.selectedPlayerIds.includes(p.id));
@@ -52,10 +66,12 @@ export const CallUpsView: React.FC = () => {
     saveCallUp(updated);
   };
 
+  const [addPlayerError, setAddPlayerError] = useState('');
+
   const handleAddPlayerToCallUp = (id: string, asReserve = false) => {
     if (!activeCallUp) return;
     if (activeCallUp.selectedPlayerIds.includes(id) || activeCallUp.reservePlayerIds.includes(id)) {
-      alert('El jugador ya se encuentra en esta lista.');
+      setAddPlayerError('El jugador ya se encuentra en esta lista.');
       return;
     }
 
@@ -65,7 +81,45 @@ export const CallUpsView: React.FC = () => {
       reservePlayerIds: asReserve ? [...activeCallUp.reservePlayerIds, id] : activeCallUp.reservePlayerIds,
     };
     saveCallUp(updated);
+    setAddPlayerError('');
     setIsAddPlayerModalOpen(false);
+  };
+
+  const handleCreateCallUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+
+    const newCallUp: CallUp = {
+      id: 'call-' + Date.now(),
+      title: newTitle.trim(),
+      category: newCategory,
+      season: newSeason,
+      selectionName: newSelectionName,
+      tournament: newTournament,
+      date: newDate,
+      location: newLocation,
+      coachingStaff: newStaff.split(',').map(s => s.trim()).filter(Boolean),
+      selectedPlayerIds: [],
+      reservePlayerIds: [],
+      pendingConfirmationIds: [],
+      notes: newNotes,
+      isOfficialPublished: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    saveCallUp(newCallUp);
+    setSelectedCallUpId(newCallUp.id);
+    setIsCreateModalOpen(false);
+    setNewTitle('');
+  };
+
+  const handleDeleteCallUp = () => {
+    if (!activeCallUp) return;
+    if (confirm(`¿Estás seguro de que deseas eliminar la convocatoria "${activeCallUp.title}"?`)) {
+      deleteCallUp(activeCallUp.id);
+      const remaining = callUps.filter(c => c.id !== activeCallUp.id);
+      if (remaining.length > 0) setSelectedCallUpId(remaining[0].id);
+    }
   };
 
   const handlePrint = () => {
@@ -107,6 +161,14 @@ export const CallUpsView: React.FC = () => {
           </select>
 
           <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-sm cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nueva Convocatoria</span>
+          </button>
+
+          <button
             onClick={() => setIsOfficialLetterView(!isOfficialLetterView)}
             className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-all cursor-pointer"
           >
@@ -116,11 +178,21 @@ export const CallUpsView: React.FC = () => {
 
           <button
             onClick={() => setIsAddPlayerModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
           >
             <UserPlus className="h-4 w-4" />
             <span>Añadir Futbolista</span>
           </button>
+
+          {activeCallUp && (
+            <button
+              onClick={handleDeleteCallUp}
+              className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 transition-colors"
+              title="Eliminar convocatoria"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -129,15 +201,14 @@ export const CallUpsView: React.FC = () => {
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300">
           <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
           <div>
-            <span className="font-bold">Advertencia de Categoría de Edad:</span> Se detectaron futbolistas que superan el rango de nacimiento de la categoría {activeCallUp.category}: {ageWarnings.map(w => w.sportsName).join(', ')}.
+            <span className="font-bold">Advertencia de Categoría de Edad:</span> Se detectaron futbolistas que superan el rango de nacimiento de la categoría {activeCallUp?.category}: {ageWarnings.map(w => w.sportsName).join(', ')}.
           </div>
         </div>
       )}
 
-      {/* Official Communication Letter Format (Printable) */}
+      {/* Official Communication Letter Format */}
       {isOfficialLetterView ? (
         <div className="rounded-2xl border border-slate-700 bg-white p-8 text-slate-900 shadow-2xl space-y-6">
-          {/* Header of Letter */}
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
             <div>
               <h3 className="text-xl font-black uppercase tracking-wider text-slate-950">
@@ -151,8 +222,8 @@ export const CallUpsView: React.FC = () => {
               </p>
             </div>
             <div className="text-right text-xs">
-              <span className="font-bold text-slate-900">{activeCallUp.season}</span>
-              <p className="text-slate-500">Fecha: {activeCallUp.date}</p>
+              <span className="font-bold text-slate-900">{activeCallUp?.season}</span>
+              <p className="text-slate-500">Fecha: {activeCallUp?.date}</p>
             </div>
           </div>
 
@@ -182,7 +253,7 @@ export const CallUpsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {selectedPlayers.map((p, idx) => (
+                {selectedPlayers.map((p) => (
                   <tr key={p.id}>
                     <td className="py-2 px-3 font-bold">{p.dorsal}</td>
                     <td className="py-2 px-3 font-semibold">{p.firstName} {p.lastName} ({p.sportsName})</td>
@@ -209,7 +280,7 @@ export const CallUpsView: React.FC = () => {
           <div className="border-t border-slate-300 pt-4 flex justify-between text-xs text-slate-600">
             <div>
               <p className="font-bold text-slate-900">Cuerpo Técnico Oficial:</p>
-              <p>{activeCallUp.coachingStaff.join(', ')}</p>
+              <p>{activeCallUp?.coachingStaff?.join(', ')}</p>
             </div>
             <div className="text-right">
               <p className="italic">Firmado digitalmente</p>
@@ -220,7 +291,7 @@ export const CallUpsView: React.FC = () => {
           <div className="text-center pt-2">
             <button
               onClick={handlePrint}
-              className="rounded-xl bg-slate-900 text-white font-bold px-6 py-2 text-xs shadow hover:bg-slate-800"
+              className="rounded-xl bg-slate-900 text-white font-bold px-6 py-2 text-xs shadow hover:bg-slate-800 cursor-pointer"
             >
               Imprimir Comunicación Oficial
             </button>
@@ -247,7 +318,7 @@ export const CallUpsView: React.FC = () => {
               <div className="space-y-2">
                 {selectedPlayers.length === 0 ? (
                   <p className="py-8 text-center text-xs text-slate-500">
-                    Aún no hay futbolistas añadidos a esta convocatoria.
+                    Aún no hay futbolistas añadidos a esta convocatoria. Pulsa "Añadir Futbolista".
                   </p>
                 ) : (
                   selectedPlayers.map((player) => (
@@ -278,7 +349,7 @@ export const CallUpsView: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleRemovePlayer(player.id, false)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
                           title="Quitar de convocatoria"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -316,7 +387,7 @@ export const CallUpsView: React.FC = () => {
                       </div>
                       <button
                         onClick={() => handleRemovePlayer(player.id, true)}
-                        className="p-1 text-slate-500 hover:text-red-400"
+                        className="p-1 text-slate-500 hover:text-red-400 cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -331,31 +402,169 @@ export const CallUpsView: React.FC = () => {
               <h4 className="font-bold text-slate-200 uppercase tracking-wider text-[11px] text-sky-400">
                 Detalles del Torneo / Concentración
               </h4>
-              <p><strong>Ubicación:</strong> {activeCallUp.location}</p>
-              <p><strong>Fechas:</strong> {activeCallUp.date} {activeCallUp.endDate ? `al ${activeCallUp.endDate}` : ''}</p>
-              <p><strong>Cuerpo Técnico:</strong> {activeCallUp.coachingStaff.join(', ')}</p>
+              <p><strong>Ubicación:</strong> {activeCallUp?.location}</p>
+              <p><strong>Fechas:</strong> {activeCallUp?.date} {activeCallUp?.endDate ? `al ${activeCallUp?.endDate}` : ''}</p>
+              <p><strong>Cuerpo Técnico:</strong> {activeCallUp?.coachingStaff?.join(', ')}</p>
               <p className="text-slate-400 italic mt-2 bg-slate-950/60 p-2.5 rounded border border-slate-800">
-                "{activeCallUp.notes}"
+                "{activeCallUp?.notes || 'Convocatoria oficial validada por la dirección deportiva.'}"
               </p>
             </div>
           </div>
         </div>
       )}
 
+      {/* Modal: Create New Convocatoria */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h3 className="font-bold text-white text-sm">Crear Nueva Convocatoria Oficial</h3>
+              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCallUp} className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-300 block mb-1 font-semibold">Título de la Convocatoria *</label>
+                <input
+                  type="text"
+                  required
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="ej. Campeonato de España Sub-16 — Fase Final"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Categoría</label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value as Category)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  >
+                    <option value="Sub-12">Sub-12</option>
+                    <option value="Sub-14">Sub-14</option>
+                    <option value="Sub-16">Sub-16</option>
+                    <option value="Sub-18">Sub-18</option>
+                    <option value="Sub-23">Sub-23</option>
+                    <option value="Absoluta">Absoluta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Temporada</label>
+                  <input
+                    type="text"
+                    value={newSeason}
+                    onChange={(e) => setNewSeason(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    required
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Ubicación / Estadio</label>
+                  <input
+                    type="text"
+                    value={newLocation}
+                    onChange={(e) => setNewLocation(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 block mb-1">Torneo / Motivo</label>
+                <input
+                  type="text"
+                  value={newTournament}
+                  onChange={(e) => setNewTournament(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 block mb-1">Cuerpo Técnico (separado por comas)</label>
+                <input
+                  type="text"
+                  value={newStaff}
+                  onChange={(e) => setNewStaff(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-emerald-500 px-4 py-1.5 font-bold text-slate-950 hover:bg-emerald-400 cursor-pointer"
+                >
+                  Crear Convocatoria
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Add Player to Callup Modal */}
       {isAddPlayerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="font-bold text-white text-sm">Seleccionar Jugador para Convocatoria</h3>
+              <div>
+                <h3 className="font-bold text-white text-sm">Añadir Jugador a la Convocatoria</h3>
+                <p className="text-[11px] text-slate-400">{activeCallUp?.title}</p>
+              </div>
               <button onClick={() => setIsAddPlayerModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {/* Filter / Search input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchPlayerTerm}
+                onChange={(e) => setSearchPlayerTerm(e.target.value)}
+                placeholder="Filtrar por nombre, club o isla..."
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 pl-9 pr-3 py-1.5 text-xs text-white"
+              />
+            </div>
+
+            {addPlayerError && (
+              <div className="rounded-lg bg-red-500/20 border border-red-500/40 p-2 text-xs text-red-300 font-semibold flex items-center justify-between">
+                <span>{addPlayerError}</span>
+                <button onClick={() => setAddPlayerError('')} className="text-red-400 hover:text-white">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
               {players
-                .filter(p => !activeCallUp.selectedPlayerIds.includes(p.id) && !activeCallUp.reservePlayerIds.includes(p.id))
+                .filter(p => !activeCallUp?.selectedPlayerIds.includes(p.id) && !activeCallUp?.reservePlayerIds.includes(p.id))
+                .filter(p => !searchPlayerTerm || p.sportsName.toLowerCase().includes(searchPlayerTerm.toLowerCase()) || p.currentClub.toLowerCase().includes(searchPlayerTerm.toLowerCase()) || p.island.toLowerCase().includes(searchPlayerTerm.toLowerCase()))
                 .map((p) => (
                   <div
                     key={p.id}
@@ -372,13 +581,13 @@ export const CallUpsView: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleAddPlayerToCallUp(p.id, false)}
-                        className="rounded-lg bg-emerald-500 px-2 py-1 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"
+                        className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 cursor-pointer"
                       >
                         Titular
                       </button>
                       <button
                         onClick={() => handleAddPlayerToCallUp(p.id, true)}
-                        className="rounded-lg bg-slate-700 px-2 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-600"
+                        className="rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-600 cursor-pointer"
                       >
                         Reserva
                       </button>

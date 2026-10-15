@@ -37,6 +37,8 @@ interface AppContextType {
   auditLogs: AuditLog[];
   selectedPlayerId: string | null;
   setSelectedPlayerId: (id: string | null) => void;
+  editingPlayer: Player | null;
+  setEditingPlayer: (player: Player | null) => void;
   isAddPlayerOpen: boolean;
   setIsAddPlayerOpen: (open: boolean) => void;
   isAddObservationOpen: boolean;
@@ -48,10 +50,14 @@ interface AppContextType {
   updatePlayer: (id: string, updates: Partial<Player>) => void;
   togglePinPlayer: (id: string) => void;
   deletePlayer: (id: string) => void;
+  importPlayersBulk: (newPlayers: Omit<Player, 'id' | 'internalCode' | 'registrationDate' | 'updatedAt' | 'callUpsCount'>[]) => void;
   addObservation: (observation: Omit<Observation, 'id' | 'createdAt'>) => void;
   addEvent: (event: Omit<ScoutingEvent, 'id'>) => void;
+  updateEvent: (id: string, updates: Partial<ScoutingEvent>) => void;
   updateEventStatus: (id: string, status: ScoutingEvent['status']) => void;
+  deleteEvent: (id: string) => void;
   saveCallUp: (callUp: CallUp) => void;
+  deleteCallUp: (id: string) => void;
   saveTacticalPlay: (play: TacticalPlay) => void;
   deleteTacticalPlay: (id: string) => void;
   sendPushNotification: (title: string, message: string, type?: PushNotification['type']) => Promise<void>;
@@ -135,6 +141,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
   const [isAddObservationOpen, setIsAddObservationOpen] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(true);
@@ -237,16 +244,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updatePlayer = (id: string, updates: Partial<Player>) => {
+    let targetName = id;
     setPlayers((prev) =>
       prev.map((p) => {
         if (p.id === id) {
           const updated = { ...p, ...updates, updatedAt: new Date().toISOString().split('T')[0] };
+          targetName = updated.sportsName;
           return updated;
         }
         return p;
       })
     );
-    addAuditLog('EDICION_JUGADOR', `Actualizados datos del jugador ID ${id}`);
+
+    // Asynchronous Supabase sync (graceful fallback if table is not yet provisioned in SQL editor)
+    try {
+      Promise.resolve(
+        supabase
+          .from('players')
+          .upsert([{ id, ...updates, updated_at: new Date().toISOString() }])
+      )
+        .then((res: any) => {
+          if (res?.error) {
+            console.info('[Supabase Sync Info]: Storing offline/local storage. Provision table in Supabase SQL Editor if remote sync desired:', res.error.message);
+          }
+        })
+        .catch((err: unknown) => {
+          console.info('[Supabase Sync Catch]: Offline fallback preserved.', err);
+        });
+    } catch {
+      // safe fallback
+    }
+
+    addAuditLog('EDICION_JUGADOR', `Actualizados datos y valoraciones del jugador ${targetName} (ID: ${id})`);
+    sendPushNotification(
+      'Jugador Actualizado',
+      `Se han guardado correctamente los cambios y valoraciones de ${targetName}.`,
+      'priority'
+    );
+  };
+
+  const importPlayersBulk = (newPlayersData: Omit<Player, 'id' | 'internalCode' | 'registrationDate' | 'updatedAt' | 'callUpsCount'>[]) => {
+    let nextNum = players.length + 1;
+    const createdList: Player[] = newPlayersData.map((data) => {
+      const code = `CAN-2026-${String(nextNum++).padStart(3, '0')}`;
+      return {
+        ...data,
+        id: 'ply-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        internalCode: code,
+        registrationDate: new Date().toISOString().split('T')[0],
+        updatedAt: new Date().toISOString().split('T')[0],
+        callUpsCount: 0,
+        isPinned: false,
+      };
+    });
+
+    setPlayers((prev) => [...createdList, ...prev]);
+    addAuditLog('IMPORTACION_MASIVA', `Importados ${createdList.length} futbolistas desde archivo.`);
+    sendPushNotification(
+      'Importación Masiva Completada',
+      `Se han incorporado ${createdList.length} futbolistas a la base de datos federativa.`,
+      'sync'
+    );
   };
 
   const togglePinPlayer = (id: string) => {
@@ -258,7 +316,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deletePlayer = (id: string) => {
     const ply = players.find(p => p.id === id);
     setPlayers((prev) => prev.filter((p) => p.id !== id));
+    if (selectedPlayerId === id) setSelectedPlayerId(null);
+    if (editingPlayer?.id === id) setEditingPlayer(null);
     addAuditLog('BAJA_JUGADOR', `Eliminado jugador ${ply?.sportsName || id}`);
+    sendPushNotification('Jugador Eliminado', `${ply?.sportsName || 'Jugador'} ha sido retirado de la base de datos.`, 'system');
   };
 
   const addObservation = (obsData: Omit<Observation, 'id' | 'createdAt'>) => {
@@ -297,6 +358,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEvents((prev) => [newEvent, ...prev]);
     addAuditLog('EVENTO_AGENDADO', `Programado evento: ${newEvent.title} en ${newEvent.location}`);
     sendPushNotification('Evento Programado', `${newEvent.title} para el día ${newEvent.date}`, 'system');
+  };
+
+  const updateEvent = (id: string, updates: Partial<ScoutingEvent>) => {
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
+    );
+    addAuditLog('ACTUALIZACION_EVENTO', `Actualizado evento de agenda ID ${id}`);
+    sendPushNotification('Evento Modificado', 'Se han actualizado los detalles del evento.', 'system');
   };
 
   const updateEventStatus = (id: string, status: ScoutingEvent['status']) => {
@@ -339,6 +408,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sendPushNotification('Pizarra Táctica Actualizada', `Nueva jugada ensayada: "${play.title}"`, 'system');
   };
 
+  const deleteEvent = (id: string) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    addAuditLog('BAJA_EVENTO', `Eliminado evento de agenda ID ${id}`);
+    sendPushNotification('Evento Eliminado', 'Se ha eliminado el evento de la agenda.', 'system');
+  };
+
+  const deleteCallUp = (id: string) => {
+    setCallUps((prev) => prev.filter((c) => c.id !== id));
+    addAuditLog('BAJA_CONVOCATORIA', `Eliminada convocatoria ID ${id}`);
+    sendPushNotification('Convocatoria Eliminada', 'Se ha eliminado la convocatoria.', 'callup');
+  };
+
   const deleteTacticalPlay = (id: string) => {
     setTacticalPlays((prev) => prev.filter((p) => p.id !== id));
   };
@@ -377,6 +458,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         auditLogs,
         selectedPlayerId,
         setSelectedPlayerId,
+        editingPlayer,
+        setEditingPlayer,
         isAddPlayerOpen,
         setIsAddPlayerOpen,
         isAddObservationOpen,
@@ -386,10 +469,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePlayer,
         togglePinPlayer,
         deletePlayer,
+        importPlayersBulk,
         addObservation,
         addEvent,
+        updateEvent,
         updateEventStatus,
+        deleteEvent,
         saveCallUp,
+        deleteCallUp,
         saveTacticalPlay,
         deleteTacticalPlay,
         sendPushNotification,

@@ -14,7 +14,9 @@ import {
   ChevronRight,
   Shield,
   Star,
-  Download
+  Download,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { Player, Island, Category, PlayerPosition, PreferredFoot, ScoutingStatus } from '../../types';
@@ -24,6 +26,9 @@ export const PlayerListView: React.FC = () => {
     players, 
     togglePinPlayer, 
     setSelectedPlayerId, 
+    setEditingPlayer,
+    updatePlayer,
+    deletePlayer,
     setIsAddPlayerOpen, 
     setIsAddObservationOpen,
     setActiveTab
@@ -187,6 +192,13 @@ export const PlayerListView: React.FC = () => {
     setSelectedPlayerIds((prev) =>
       prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
     );
+  };
+
+  const handleBatchStatusUpdate = (newStatus: ScoutingStatus) => {
+    selectedPlayerIds.forEach((id) => {
+      updatePlayer(id, { status: newStatus });
+    });
+    setSelectedPlayerIds([]);
   };
 
   // Export to CSV
@@ -493,6 +505,54 @@ export const PlayerListView: React.FC = () => {
         )}
       </div>
 
+      {/* Batch Actions Bar */}
+      {selectedPlayerIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-slate-900 to-sky-500/15 p-3.5 shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-xs font-black text-slate-950">
+              {selectedPlayerIds.length}
+            </span>
+            <span className="text-xs font-bold text-white">
+              futbolistas seleccionados para acción en lote:
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-400">Cambiar estado a:</span>
+            <button
+              onClick={() => handleBatchStatusUpdate('Prioritario')}
+              className="rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/30 cursor-pointer"
+            >
+              Prioritario
+            </button>
+            <button
+              onClick={() => handleBatchStatusUpdate('Propuesto para convocatoria')}
+              className="rounded-lg bg-sky-500/20 border border-sky-500/40 px-2.5 py-1 text-xs font-bold text-sky-300 hover:bg-sky-500/30 cursor-pointer"
+            >
+              Propuesto
+            </button>
+            <button
+              onClick={() => handleBatchStatusUpdate('Convocado')}
+              className="rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 cursor-pointer"
+            >
+              Convocado
+            </button>
+            <button
+              onClick={() => handleBatchStatusUpdate('En seguimiento')}
+              className="rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 cursor-pointer"
+            >
+              En seguimiento
+            </button>
+            <button
+              onClick={() => setSelectedPlayerIds([])}
+              className="rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer ml-2"
+            >
+              Deseleccionar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Wyscout Style Table (Image 1 reference) */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
@@ -680,20 +740,38 @@ export const PlayerListView: React.FC = () => {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => setSelectedPlayerId(player.id)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 transition-colors"
-                            title="Ver ficha completa"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                            title="Ver ficha completa y radar"
                           >
                             <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingPlayer(player)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                            title="Editar datos del jugador"
+                          >
+                            <Edit3 className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => {
                               setSelectedPlayerId(player.id);
                               setIsAddObservationOpen(true);
                             }}
-                            className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-colors"
+                            className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors cursor-pointer"
                             title="Añadir observación de scouting"
                           >
                             <Plus className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Estás seguro de que deseas eliminar a ${player.sportsName} de la base de datos?`)) {
+                                deletePlayer(player.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
+                            title="Eliminar jugador"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </td>

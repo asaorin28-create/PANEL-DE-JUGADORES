@@ -9,7 +9,10 @@ import {
   Check, 
   Printer, 
   Award,
-  Sparkles
+  Sparkles,
+  UserCheck,
+  X,
+  Search
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { Player, PlayerPosition } from '../../types';
@@ -29,6 +32,10 @@ export const LineupBuilderView: React.FC = () => {
   const [formation, setFormation] = useState<'4-3-3' | '4-2-3-1' | '4-4-2' | '3-5-2'>('4-3-3');
   const [teamTitle, setTeamTitle] = useState('Selección Canaria Sub-16 Masculina');
   const [matchContext, setMatchContext] = useState('Campeonato de España de Selecciones Autonómicas (Fase 1)');
+
+  // Player selector modal for a specific slot
+  const [selectingSlotIdx, setSelectingSlotIdx] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Formations definitions with normalized pitch coordinates
   const FORMATIONS_MAP: Record<string, { role: PlayerPosition; x: number; y: number }[]> = {
@@ -90,7 +97,6 @@ export const LineupBuilderView: React.FC = () => {
   const [starterSlots, setStarterSlots] = useState<PitchSlot[]>(() => {
     const coords = FORMATIONS_MAP['4-3-3'];
     return coords.map((c, i) => {
-      // Auto-assign top matching player from mock
       const candidate = players.find(p => p.primaryPosition === c.role);
       return {
         id: `slot-${i}`,
@@ -98,13 +104,13 @@ export const LineupBuilderView: React.FC = () => {
         defaultX: c.x,
         defaultY: c.y,
         player: candidate || players[i % players.length],
-        isCaptain: i === 2, // e.g. Jonay captain
+        isCaptain: i === 2,
       };
     });
   });
 
   // Change formation
-  const handleFormationChange = (newFmt: any) => {
+  const handleFormationChange = (newFmt: '4-3-3' | '4-2-3-1' | '4-4-2' | '3-5-2') => {
     setFormation(newFmt);
     const coords = FORMATIONS_MAP[newFmt];
     setStarterSlots((prev) =>
@@ -123,6 +129,7 @@ export const LineupBuilderView: React.FC = () => {
     setStarterSlots((prev) =>
       prev.map((s, idx) => (idx === slotIndex ? { ...s, player } : s))
     );
+    setSelectingSlotIdx(null);
   };
 
   const toggleCaptain = (slotIndex: number) => {
@@ -131,9 +138,22 @@ export const LineupBuilderView: React.FC = () => {
     );
   };
 
+  // Synchronize player data in slots with the latest players from context
+  React.useEffect(() => {
+    setStarterSlots((prev) =>
+      prev.map((s) => {
+        if (!s.player) return s;
+        const fresh = players.find((p) => p.id === s.player!.id);
+        return fresh ? { ...s, player: fresh } : s;
+      })
+    );
+  }, [players]);
+
   const handlePrint = () => {
     window.print();
   };
+
+  const activeSlot = selectingSlotIdx !== null ? starterSlots[selectingSlotIdx] : null;
 
   return (
     <div className="space-y-4 pb-12">
@@ -145,12 +165,13 @@ export const LineupBuilderView: React.FC = () => {
               <LayoutGrid className="h-3.5 w-3.5" />
               Alineación Oficial de la Selección
             </span>
+            <span className="text-xs text-slate-400">Haz clic en cualquier posición del campo para cambiar de jugador</span>
           </div>
           <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
             Constructor Visual de Once Inicial
           </h2>
           <p className="text-xs text-slate-400">
-            Disposición táctica, asignación de dorsales y capitanía sobre campo interactivo
+            {teamTitle} • {matchContext}
           </p>
         </div>
 
@@ -186,7 +207,7 @@ export const LineupBuilderView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: The Visual Pitch */}
         <div className="lg:col-span-2 space-y-3">
-          <div className="relative w-full aspect-[4/3] rounded-2xl bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 border-4 border-slate-700 shadow-2xl overflow-hidden p-4">
+          <div className="relative w-full aspect-[4/3] rounded-2xl bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 border-4 border-slate-700 shadow-2xl overflow-hidden p-4 select-none">
             {/* Field Stripes */}
             <div className="absolute inset-0 flex pointer-events-none opacity-20">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -219,16 +240,18 @@ export const LineupBuilderView: React.FC = () => {
               return (
                 <div
                   key={slot.id}
+                  onClick={() => setSelectingSlotIdx(index)}
                   style={{
                     left: `${slot.defaultX}%`,
                     top: `${slot.defaultY}%`,
                     transform: 'translate(-50%, -50%)',
                   }}
                   className="absolute z-20 flex flex-col items-center group cursor-pointer"
+                  title="Haz clic para cambiar este jugador"
                 >
                   {/* Token circle */}
                   <div className="relative">
-                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl border-2 border-sky-950 group-hover:scale-110 transition-transform">
+                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl border-2 border-sky-950 group-hover:scale-110 group-hover:ring-4 group-hover:ring-amber-300/40 transition-all">
                       {p?.dorsal || index + 1}
                     </div>
 
@@ -294,11 +317,17 @@ export const LineupBuilderView: React.FC = () => {
 
                   <div className="flex items-center gap-1.5">
                     <button
+                      onClick={() => setSelectingSlotIdx(idx)}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-300 hover:text-white hover:bg-slate-600 transition-colors cursor-pointer"
+                    >
+                      Cambiar
+                    </button>
+                    <button
                       onClick={() => toggleCaptain(idx)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
                         slot.isCaptain
                           ? 'bg-red-500 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:text-white'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
                       }`}
                       title="Asignar brazalete de capitán"
                     >
@@ -329,6 +358,84 @@ export const LineupBuilderView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Select Player Modal for Slot */}
+      {selectingSlotIdx !== null && activeSlot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div>
+                <h3 className="font-bold text-white text-sm">
+                  Asignar Jugador a la Posición {activeSlot.slotPosition}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Selecciona de la base de datos de Canarias
+                </p>
+              </div>
+              <button onClick={() => setSelectingSlotIdx(null)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre o club..."
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 pl-9 pr-3 py-1.5 text-xs text-white"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              {players
+                .filter(p => !searchTerm || p.sportsName.toLowerCase().includes(searchTerm.toLowerCase()) || p.currentClub.toLowerCase().includes(searchTerm.toLowerCase()))
+                .map((p) => {
+                  const isCurrent = activeSlot.player?.id === p.id;
+                  const isCompatible = p.primaryPosition === activeSlot.slotPosition || p.secondaryPositions.includes(activeSlot.slotPosition);
+
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleAssignPlayerToSlot(selectingSlotIdx, p)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                        isCurrent 
+                          ? 'bg-amber-500/20 border-amber-500/50 text-white' 
+                          : 'bg-slate-800/60 border-slate-800 hover:bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <img src={p.photoUrl} alt={p.sportsName} className="h-8 w-8 rounded-full object-cover border border-slate-700" />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white">{p.sportsName}</span>
+                            <span className="text-slate-500 font-mono text-[10px]">#{p.dorsal}</span>
+                            {isCompatible && (
+                              <span className="rounded bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 text-[9px] font-bold">
+                                Compatible
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400">{p.primaryPosition} • {p.currentClub} • {p.island}</p>
+                        </div>
+                      </div>
+
+                      {isCurrent ? (
+                        <span className="text-amber-400 text-xs font-bold">En el campo</span>
+                      ) : (
+                        <button className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-amber-400">
+                          Seleccionar
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

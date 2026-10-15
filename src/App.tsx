@@ -22,6 +22,8 @@ const MainLayout: React.FC = () => {
     activeTab, 
     selectedPlayerId, 
     setSelectedPlayerId, 
+    editingPlayer,
+    setEditingPlayer,
     isAddPlayerOpen, 
     setIsAddPlayerOpen, 
     isAddObservationOpen, 
@@ -66,8 +68,17 @@ const MainLayout: React.FC = () => {
         />
       )}
 
+      {/* Add New Player Modal */}
       {isAddPlayerOpen && (
         <PlayerFormModal onClose={() => setIsAddPlayerOpen(false)} />
+      )}
+
+      {/* Edit Existing Player Modal */}
+      {editingPlayer && (
+        <PlayerFormModal
+          playerToEdit={editingPlayer}
+          onClose={() => setEditingPlayer(null)}
+        />
       )}
 
       {isAddObservationOpen && (

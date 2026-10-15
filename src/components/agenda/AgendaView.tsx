@@ -9,17 +9,20 @@ import {
   X, 
   Users, 
   Sparkles,
-  Check
+  Check,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { ScoutingEvent, Island } from '../../types';
 
 export const AgendaView: React.FC = () => {
-  const { events, addEvent, updateEventStatus, players } = useApp();
+  const { events, addEvent, updateEvent, updateEventStatus, deleteEvent, players } = useApp();
 
   const [selectedIsland, setSelectedIsland] = useState<string>('ALL');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [isNewEventModalOpen, setIsNewEventModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ScoutingEvent | null>(null);
 
   // New Event Form State
   const [title, setTitle] = useState('');
@@ -166,22 +169,39 @@ export const AgendaView: React.FC = () => {
 
             <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-[11px] text-slate-400">
               <span>Responsable: <strong className="text-slate-200">{event.responsible}</strong></span>
-              {event.status === 'Pendiente' ? (
+              
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => updateEventStatus(event.id, 'Completado')}
-                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold"
+                  onClick={() => setEditingEvent(event)}
+                  className="p-1 rounded text-slate-400 hover:text-amber-400 transition-colors"
+                  title="Editar evento"
                 >
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Marcar Realizado</span>
+                  <Edit2 className="h-3.5 w-3.5" />
                 </button>
-              ) : (
                 <button
-                  onClick={() => updateEventStatus(event.id, 'Pendiente')}
-                  className="text-slate-500 hover:text-slate-400"
+                  onClick={() => deleteEvent(event.id)}
+                  className="p-1 rounded text-slate-500 hover:text-red-400 transition-colors"
+                  title="Eliminar evento"
                 >
-                  Reabrir
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
-              )}
+                {event.status === 'Pendiente' ? (
+                  <button
+                    onClick={() => updateEventStatus(event.id, 'Completado')}
+                    className="flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-emerald-400 hover:bg-emerald-500/20 font-bold ml-1"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Realizado</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => updateEventStatus(event.id, 'Pendiente')}
+                    className="rounded bg-slate-800 px-2 py-0.5 text-slate-400 hover:text-slate-200 ml-1"
+                  >
+                    Reabrir
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -310,6 +330,134 @@ export const AgendaView: React.FC = () => {
                   className="rounded-lg bg-amber-500 px-4 py-1.5 font-bold text-slate-950 hover:bg-amber-400"
                 >
                   Programar en Agenda
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Event Modal */}
+      {editingEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h3 className="font-bold text-white text-sm">Editar Evento de Scouting</h3>
+              <button onClick={() => setEditingEvent(null)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateEvent(editingEvent.id, {
+                  title: editingEvent.title,
+                  type: editingEvent.type,
+                  date: editingEvent.date,
+                  time: editingEvent.time,
+                  location: editingEvent.location,
+                  island: editingEvent.island,
+                  responsible: editingEvent.responsible,
+                  involvedTeams: editingEvent.involvedTeams,
+                  notes: editingEvent.notes,
+                });
+                setEditingEvent(null);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="text-slate-300 block mb-1">Título del Evento</label>
+                <input
+                  type="text"
+                  required
+                  value={editingEvent.title}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, title: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingEvent.date}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Hora</label>
+                  <input
+                    type="time"
+                    required
+                    value={editingEvent.time}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, time: e.target.value })}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 block mb-1">Instalación / Estadio</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingEvent.location}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, location: e.target.value })}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 block mb-1">Isla</label>
+                  <select
+                    value={editingEvent.island}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, island: e.target.value as any })}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                  >
+                    {islands.map((i) => (
+                      <option key={i} value={i}>{i}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 block mb-1">Equipos / Partido</label>
+                <input
+                  type="text"
+                  value={editingEvent.involvedTeams}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, involvedTeams: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 block mb-1">Notas de Coordinación</label>
+                <textarea
+                  rows={2}
+                  value={editingEvent.notes}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, notes: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingEvent(null)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-amber-500 px-4 py-1.5 font-bold text-slate-950 hover:bg-amber-400"
+                >
+                  Guardar Cambios
                 </button>
               </div>
             </form>

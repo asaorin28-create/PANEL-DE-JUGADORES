@@ -31,6 +31,8 @@ export const ReportsAndComparisonView: React.FC = () => {
   const reportPlayer = players.find((p) => p.id === reportPlayerId);
   const playerObs = observations.filter((o) => o.playerId === reportPlayerId);
 
+  const [limitWarning, setLimitWarning] = useState(false);
+
   const comparedPlayers = players.filter((p) => selectedIds.includes(p.id));
 
   const toggleComparePlayer = (id: string) => {
@@ -41,8 +43,10 @@ export const ReportsAndComparisonView: React.FC = () => {
     } else {
       if (selectedIds.length < 4) {
         setSelectedIds([...selectedIds, id]);
+        setLimitWarning(false);
       } else {
-        alert('Puedes comparar un máximo de 4 futbolistas simultáneamente.');
+        setLimitWarning(true);
+        setTimeout(() => setLimitWarning(false), 3000);
       }
     }
   };
@@ -115,7 +119,14 @@ export const ReportsAndComparisonView: React.FC = () => {
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Selecciona futbolistas para comparar (Máximo 4)
               </span>
-              <span className="text-xs text-amber-400 font-bold">{selectedIds.length} / 4 seleccionados</span>
+              <div className="flex items-center gap-2">
+                {limitWarning && (
+                  <span className="text-xs text-red-400 font-semibold animate-pulse">
+                    Máximo 4 futbolistas permitidos
+                  </span>
+                )}
+                <span className="text-xs text-amber-400 font-bold">{selectedIds.length} / 4 seleccionados</span>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2">

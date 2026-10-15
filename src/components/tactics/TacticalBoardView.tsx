@@ -17,7 +17,9 @@ import {
   Maximize2,
   Users,
   Flame,
-  HelpCircle
+  HelpCircle,
+  Edit2,
+  Check
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { 
@@ -69,6 +71,11 @@ export const TacticalBoardView: React.FC = () => {
   const [activeTool, setActiveTool] = useState<string>('select');
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
 
+  // Play Title & Description editing
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(currentPlay.title);
+  const [editedDesc, setEditedDesc] = useState(currentPlay.description);
+
   // Animation state
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0); // 0 to 100 within current phase
@@ -88,7 +95,6 @@ export const TacticalBoardView: React.FC = () => {
       interval = setInterval(() => {
         setPlaybackProgress((prev) => {
           if (prev >= 100) {
-            // Next phase or loop
             if (currentPhaseIndex < currentPlay.phases.length - 1) {
               setCurrentPhaseIndex(currentPhaseIndex + 1);
               return 0;
@@ -97,30 +103,28 @@ export const TacticalBoardView: React.FC = () => {
               return 0;
             }
           }
-          return prev + 4;
+          return prev + 5;
         });
       }, 100);
     }
     return () => clearInterval(interval);
   }, [isPlaying, currentPhaseIndex, currentPlay.phases.length]);
 
-  // Handle Token Drag
-  const handleMouseDownToken = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  // Handle Token Drag (Mouse & Touch)
+  const handleStartTokenDrag = (id: string) => {
     if (activeTool === 'select') {
       setDraggingTokenId(id);
       setSelectedTokenId(id);
     }
   };
 
-  const handleMouseMovePitch = (e: React.MouseEvent) => {
+  const updateCoordinatesFromEvent = (clientX: number, clientY: number) => {
     if (!pitchRef.current) return;
     const rect = pitchRef.current.getBoundingClientRect();
-    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
+    const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
 
     if (draggingTokenId) {
-      // Update token position in current phase
       const updatedTokens = activePhase.tokens.map((t) =>
         t.id === draggingTokenId ? { ...t, x: Math.round(x), y: Math.round(y) } : t
       );
@@ -130,7 +134,17 @@ export const TacticalBoardView: React.FC = () => {
     }
   };
 
-  const handleMouseUpPitch = () => {
+  const handleMouseMovePitch = (e: React.MouseEvent) => {
+    updateCoordinatesFromEvent(e.clientX, e.clientY);
+  };
+
+  const handleTouchMovePitch = (e: React.TouchEvent) => {
+    if (e.touches[0]) {
+      updateCoordinatesFromEvent(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleFinishInteraction = () => {
     setDraggingTokenId(null);
 
     if (isDrawing && currentPoints.length > 1) {
@@ -161,12 +175,12 @@ export const TacticalBoardView: React.FC = () => {
     setCurrentPoints([]);
   };
 
-  const handleMouseDownPitch = (e: React.MouseEvent) => {
+  const handleStartDraw = (clientX: number, clientY: number) => {
     if (activeTool !== 'select') {
       if (!pitchRef.current) return;
       const rect = pitchRef.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
       setIsDrawing(true);
       setCurrentPoints([{ x, y }]);
     }
@@ -203,6 +217,23 @@ export const TacticalBoardView: React.FC = () => {
       color: team === 'canarias' ? '#facc15' : team === 'rival' ? '#ef4444' : '#ffffff',
     };
     updateCurrentPhaseTokens([...activePhase.tokens, newToken]);
+    setSelectedTokenId(newToken.id);
+  };
+
+  // Delete token
+  const deleteToken = (tokenId: string) => {
+    const updatedTokens = activePhase.tokens.filter((t) => t.id !== tokenId);
+    updateCurrentPhaseTokens(updatedTokens);
+    if (selectedTokenId === tokenId) setSelectedTokenId(null);
+  };
+
+  // Update selected token properties
+  const updateSelectedToken = (updates: Partial<TacticalToken>) => {
+    if (!selectedTokenId) return;
+    const updatedTokens = activePhase.tokens.map((t) =>
+      t.id === selectedTokenId ? { ...t, ...updates } : t
+    );
+    updateCurrentPhaseTokens(updatedTokens);
   };
 
   // Add phase
@@ -213,7 +244,7 @@ export const TacticalBoardView: React.FC = () => {
       name: `Fase ${nextIndex}: Continuación`,
       description: 'Secuencia de movimiento',
       durationSeconds: 3,
-      tokens: JSON.parse(JSON.stringify(activePhase.tokens)), // duplicate positions
+      tokens: JSON.parse(JSON.stringify(activePhase.tokens)),
       drawings: [],
     };
     const updated = { ...currentPlay, phases: [...currentPlay.phases, newPhase] };
@@ -227,6 +258,51 @@ export const TacticalBoardView: React.FC = () => {
     updateCurrentPhaseDrawings([]);
   };
 
+  // Create new play
+  const handleCreateNewPlay = () => {
+    const newPlay: TacticalPlay = {
+      id: 'play-' + Date.now(),
+      title: 'Nueva Jugada Táctica',
+      category: 'Falta lateral larga',
+      description: 'Estrategia personalizada del cuerpo técnico',
+      author: 'David Sousa',
+      team: 'Selección Canaria Sub-16',
+      pitchOrientation: 'horizontal',
+      pitchView: 'half',
+      createdAt: new Date().toISOString().split('T')[0],
+      tags: ['Personalizada'],
+      phases: [
+        {
+          id: 'phase-init-' + Date.now(),
+          name: 'Fase 1: Planteamiento',
+          description: 'Posiciones iniciales en el campo',
+          durationSeconds: 3,
+          tokens: [
+            { id: 't1', team: 'canarias', number: 10, label: 'Lanzador', x: 25, y: 80, color: '#facc15' },
+            { id: 't2', team: 'canarias', number: 8, label: 'Rematador', x: 50, y: 40, color: '#facc15' },
+            { id: 'r1', team: 'rival', number: 1, label: 'Portero', x: 60, y: 15, color: '#ef4444' },
+            { id: 'ball', team: 'ball', number: 0, label: '⚽', x: 26, y: 78, color: '#ffffff' },
+          ],
+          drawings: [],
+        },
+      ],
+    };
+    saveTacticalPlay(newPlay);
+    setCurrentPlay(newPlay);
+    setCurrentPhaseIndex(0);
+    setEditedTitle(newPlay.title);
+    setEditedDesc(newPlay.description);
+  };
+
+  const handleSavePlayInfo = () => {
+    const updated = { ...currentPlay, title: editedTitle, description: editedDesc };
+    setCurrentPlay(updated);
+    saveTacticalPlay(updated);
+    setIsEditingTitle(false);
+  };
+
+  const selectedToken = activePhase.tokens.find((t) => t.id === selectedTokenId);
+
   return (
     <div className="space-y-4 pb-12">
       {/* Top Controls / Play Title */}
@@ -237,18 +313,46 @@ export const TacticalBoardView: React.FC = () => {
               <Flame className="h-3.5 w-3.5" />
               Pizarra Táctica Interactiva & Jugadas Ensayadas
             </span>
-            <span className="text-xs text-slate-400">Coordenadas Normalizadas (0-100%)</span>
+            <span className="text-xs text-slate-400">Tablet / Touch & Mouse Soportado</span>
           </div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            <span>{currentPlay.title}</span>
-            <span className="text-xs font-bold text-slate-400">({currentPlay.category})</span>
-          </h2>
-          <p className="text-xs text-slate-300">
+
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="text"
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-sm font-bold text-white focus:border-amber-400"
+              />
+              <button
+                onClick={handleSavePlayInfo}
+                className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400"
+              >
+                <Check className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                {currentPlay.title}
+              </h2>
+              <button
+                onClick={() => setIsEditingTitle(true)}
+                className="text-slate-400 hover:text-amber-400 p-1"
+                title="Editar título"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-xs font-bold text-slate-400">({currentPlay.category})</span>
+            </div>
+          )}
+
+          <p className="text-xs text-slate-300 mt-0.5">
             {currentPlay.description}
           </p>
         </div>
 
-        {/* Tactical Play Selector */}
+        {/* Tactical Play Selector & Actions */}
         <div className="flex items-center gap-2">
           <select
             value={currentPlay.id}
@@ -257,6 +361,8 @@ export const TacticalBoardView: React.FC = () => {
               if (selected) {
                 setCurrentPlay(selected);
                 setCurrentPhaseIndex(0);
+                setEditedTitle(selected.title);
+                setEditedDesc(selected.description);
               }
             }}
             className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-white"
@@ -267,12 +373,20 @@ export const TacticalBoardView: React.FC = () => {
               </option>
             ))}
           </select>
+
+          <button
+            onClick={handleCreateNewPlay}
+            className="flex items-center gap-1 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 cursor-pointer shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Nueva Jugada</span>
+          </button>
         </div>
       </div>
 
       {/* Main Board Container */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Left / Top Tools Palette (FC Tactix Style - Image 4 reference) */}
+        {/* Left Tools Palette */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-4 space-y-4">
           <div>
             <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2">
@@ -282,9 +396,9 @@ export const TacticalBoardView: React.FC = () => {
               {[
                 { id: 'select', label: 'Mover Ficha', icon: Move },
                 { id: 'arrow', label: 'Flecha Recta', icon: ArrowRight },
-                { id: 'dashed', label: 'Desmarque', icon: ArrowRight, desc: 'Línea de puntos' },
-                { id: 'curve', label: 'Trayectoria', icon: ArrowRight, desc: 'Curvada' },
-                { id: 'pass', label: 'Pase Balón', icon: ArrowRight, desc: 'Azul intenso' },
+                { id: 'dashed', label: 'Desmarque', icon: ArrowRight },
+                { id: 'curve', label: 'Trayectoria', icon: ArrowRight },
+                { id: 'pass', label: 'Pase Balón', icon: ArrowRight },
                 { id: 'zone', label: 'Zona / Cuadro', icon: Square },
                 { id: 'circle', label: 'Círculo Influencia', icon: Circle },
                 { id: 'text', label: 'Instrucción', icon: Type },
@@ -317,7 +431,7 @@ export const TacticalBoardView: React.FC = () => {
             <div className="space-y-2">
               <button
                 onClick={() => addToken('canarias')}
-                className="w-full flex items-center justify-between rounded-xl bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-colors"
+                className="w-full flex items-center justify-between rounded-xl bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <div className="h-4 w-4 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black flex items-center justify-center">
@@ -330,7 +444,7 @@ export const TacticalBoardView: React.FC = () => {
 
               <button
                 onClick={() => addToken('rival')}
-                className="w-full flex items-center justify-between rounded-xl bg-red-500/20 border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/30 transition-colors"
+                className="w-full flex items-center justify-between rounded-xl bg-red-500/20 border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/30 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <div className="h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
@@ -343,13 +457,52 @@ export const TacticalBoardView: React.FC = () => {
 
               <button
                 onClick={() => addToken('ball')}
-                className="w-full flex items-center justify-between rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors"
+                className="w-full flex items-center justify-between rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 <span>Añadir Balón (⚽)</span>
                 <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
+
+          {/* Token Properties Inspector (when token selected) */}
+          {selectedToken && (
+            <div className="border-t border-slate-800 pt-3 p-3 bg-slate-950/80 rounded-xl border border-amber-500/30 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-amber-400 uppercase text-[10px]">
+                  Ficha Seleccionada ({selectedToken.label})
+                </span>
+                <button
+                  onClick={() => deleteToken(selectedToken.id)}
+                  className="text-red-400 hover:text-red-300 p-1"
+                  title="Eliminar ficha del campo"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 text-[10px] block">Dorsal</label>
+                  <input
+                    type="number"
+                    value={selectedToken.number}
+                    onChange={(e) => updateSelectedToken({ number: Number(e.target.value) })}
+                    className="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-white text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-[10px] block">Nombre / Etiqueta</label>
+                  <input
+                    type="text"
+                    value={selectedToken.label}
+                    onChange={(e) => updateSelectedToken({ label: e.target.value })}
+                    className="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-white text-xs font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Phase Management */}
           <div className="border-t border-slate-800 pt-3 space-y-2">
@@ -359,7 +512,7 @@ export const TacticalBoardView: React.FC = () => {
               </h4>
               <button
                 onClick={handleAddPhase}
-                className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1"
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="h-3 w-3" />
                 <span>Nueva Fase</span>
@@ -388,18 +541,17 @@ export const TacticalBoardView: React.FC = () => {
 
             <button
               onClick={handleClearDrawings}
-              className="w-full rounded-lg border border-slate-700 py-1.5 text-[11px] text-slate-400 hover:text-red-400 hover:border-red-400/40 transition-colors"
+              className="w-full rounded-lg border border-slate-700 py-1.5 text-[11px] text-slate-400 hover:text-red-400 hover:border-red-400/40 transition-colors cursor-pointer"
             >
               Borrar trazos de esta fase
             </button>
           </div>
         </div>
 
-        {/* Center / Right: The Interactive Scalable Pitch (Images 2 & 4 reference) */}
+        {/* Center / Right: The Interactive Scalable Pitch */}
         <div className="lg:col-span-3 space-y-3">
-          {/* Pitch Top Bar: Animation Controls & Scoreboard style */}
+          {/* Pitch Top Bar: Animation Controls */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5">
-            {/* Match simulation clock style */}
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-slate-950 px-2.5 py-1 text-xs font-mono font-bold text-amber-400 border border-slate-800">
                 FASE {currentPhaseIndex + 1} / {currentPlay.phases.length}
@@ -416,7 +568,7 @@ export const TacticalBoardView: React.FC = () => {
                   if (currentPhaseIndex > 0) setCurrentPhaseIndex(currentPhaseIndex - 1);
                 }}
                 disabled={currentPhaseIndex === 0}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors"
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors cursor-pointer"
                 title="Fase anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -424,7 +576,7 @@ export const TacticalBoardView: React.FC = () => {
 
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isPlaying 
                     ? 'bg-amber-400 text-slate-950' 
                     : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
@@ -441,7 +593,7 @@ export const TacticalBoardView: React.FC = () => {
                   }
                 }}
                 disabled={currentPhaseIndex === currentPlay.phases.length - 1}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors"
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors cursor-pointer"
                 title="Siguiente fase"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -449,13 +601,20 @@ export const TacticalBoardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Football Pitch Canvas Container */}
+          {/* Football Pitch Canvas Container (Mouse & Touch supported) */}
           <div
             ref={pitchRef}
             onMouseMove={handleMouseMovePitch}
-            onMouseUp={handleMouseUpPitch}
-            onMouseDown={handleMouseDownPitch}
-            className="relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-2xl bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 border-4 border-slate-700 shadow-2xl overflow-hidden cursor-crosshair select-none"
+            onMouseUp={handleFinishInteraction}
+            onMouseDown={(e) => handleStartDraw(e.clientX, e.clientY)}
+            onTouchMove={handleTouchMovePitch}
+            onTouchEnd={handleFinishInteraction}
+            onTouchStart={(e) => {
+              if (e.touches[0]) {
+                handleStartDraw(e.touches[0].clientX, e.touches[0].clientY);
+              }
+            }}
+            className="relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-2xl bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 border-4 border-slate-700 shadow-2xl overflow-hidden cursor-crosshair select-none touch-none"
           >
             {/* Field Stripes Texture */}
             <div className="absolute inset-0 flex pointer-events-none opacity-20">
@@ -467,7 +626,7 @@ export const TacticalBoardView: React.FC = () => {
               ))}
             </div>
 
-            {/* SVG Pitch Markings (Scalable Vector Half/Full Pitch) */}
+            {/* SVG Pitch Markings */}
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none"
               viewBox="0 0 100 100"
@@ -476,7 +635,7 @@ export const TacticalBoardView: React.FC = () => {
               {/* Outer boundary */}
               <rect x="4" y="4" width="92" height="92" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               
-              {/* Midfield line (if half pitch, this is bottom/top boundary) */}
+              {/* Midfield line */}
               <line x1="4" y1="50" x2="96" y2="50" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <circle cx="50" cy="50" r="12" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <circle cx="50" cy="50" r="0.8" fill="#ffffff" />
@@ -485,14 +644,12 @@ export const TacticalBoardView: React.FC = () => {
               <rect x="35" y="4" width="30" height="16" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <rect x="42" y="4" width="16" height="6" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <circle cx="50" cy="14" r="0.8" fill="#ffffff" />
-              {/* Penalty Arc Top */}
               <path d="M 40 20 A 10 10 0 0 0 60 20" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
 
               {/* Goal Area 2 (Bottom) */}
               <rect x="35" y="80" width="30" height="16" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <rect x="42" y="90" width="16" height="6" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
               <circle cx="50" cy="86" r="0.8" fill="#ffffff" />
-              {/* Penalty Arc Bottom */}
               <path d="M 40 80 A 10 10 0 0 1 60 80" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.8" />
 
               {/* Corner Arcs */}
@@ -551,7 +708,6 @@ export const TacticalBoardView: React.FC = () => {
                   );
                 }
 
-                // Render Arrows / Lines
                 const pointsStr = dr.points.map((p) => `${p.x},${p.y}`).join(' ');
                 return (
                   <g key={dr.id}>
@@ -563,7 +719,6 @@ export const TacticalBoardView: React.FC = () => {
                       strokeDasharray={dr.type === 'dashed-arrow' ? '1.5,1.5' : undefined}
                       strokeLinecap="round"
                     />
-                    {/* Arrow head */}
                     {dr.points.length >= 2 && (
                       <circle
                         cx={dr.points[dr.points.length - 1].x}
@@ -592,7 +747,14 @@ export const TacticalBoardView: React.FC = () => {
             {activePhase.tokens.map((token) => (
               <div
                 key={token.id}
-                onMouseDown={(e) => handleMouseDownToken(e, token.id)}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  handleStartTokenDrag(token.id);
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  handleStartTokenDrag(token.id);
+                }}
                 style={{
                   left: `${token.x}%`,
                   top: `${token.y}%`,
