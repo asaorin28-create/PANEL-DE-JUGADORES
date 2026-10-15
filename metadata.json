@@ -1,0 +1,6 @@
+{
+  "name": "Canarias Scout Pro — Plataforma de Selecciones",
+  "description": "Plataforma integral de scouting, seguimiento de jugadores, convocatorias, onces iniciales y pizarra táctica animada de las Selecciones Canarias de Fútbol con Supabase y notificaciones push en tiempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
